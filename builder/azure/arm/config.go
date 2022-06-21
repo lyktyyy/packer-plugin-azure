@@ -268,6 +268,9 @@ type Config struct {
 	//
 	// CLI example `az vm list-sizes --location westus`
 	VMSize string `mapstructure:"vm_size" required:"false"`
+	// Whether to generalize the build VM
+	// CLI example `az vm generalize`
+	Generalize bool `mapstructure:"generalize" required:"false"`
 
 	// Specify the managed image resource group name where the result of the
 	// Packer build will be saved. The resource group must already exist. If

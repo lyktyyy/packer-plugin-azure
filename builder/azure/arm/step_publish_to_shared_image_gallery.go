@@ -13,7 +13,7 @@ import (
 
 type StepPublishToSharedImageGallery struct {
 	client  *AzureClient
-	publish func(ctx context.Context, mdiID string, sharedImageGallery SharedImageGalleryDestination, miSGImageVersionEndOfLifeDate string, miSGImageVersionExcludeFromLatest bool, miSigReplicaCount int32, location string, tags map[string]*string) (string, error)
+	publish func(ctx context.Context, vmID string, sharedImageGallery SharedImageGalleryDestination, miSGImageVersionEndOfLifeDate string, miSGImageVersionExcludeFromLatest bool, miSigReplicaCount int32, location string, tags map[string]*string) (string, error)
 	say     func(message string)
 	error   func(e error)
 	toSIG   func() bool
@@ -29,7 +29,7 @@ func NewStepPublishToSharedImageGallery(client *AzureClient, ui packersdk.Ui, co
 			ui.Error(e.Error())
 		},
 		toSIG: func() bool {
-			return config.isManagedImage() && config.SharedGalleryDestination.SigDestinationGalleryName != ""
+			return config.SharedGalleryDestination.SigDestinationGalleryName != ""
 		},
 	}
 
@@ -69,7 +69,7 @@ func getSigDestination(state multistep.StateBag) SharedImageGalleryDestination {
 	}
 }
 
-func (s *StepPublishToSharedImageGallery) publishToSig(ctx context.Context, mdiID string, sharedImageGallery SharedImageGalleryDestination, miSGImageVersionEndOfLifeDate string, miSGImageVersionExcludeFromLatest bool, miSigReplicaCount int32, location string, tags map[string]*string) (string, error) {
+func (s *StepPublishToSharedImageGallery) publishToSig(ctx context.Context, vmID string, sharedImageGallery SharedImageGalleryDestination, miSGImageVersionEndOfLifeDate string, miSGImageVersionExcludeFromLatest bool, miSigReplicaCount int32, location string, tags map[string]*string) (string, error) {
 	replicationRegions := make([]compute.TargetRegion, len(sharedImageGallery.SigDestinationReplicationRegions))
 	for i, v := range sharedImageGallery.SigDestinationReplicationRegions {
 		regionName := v
@@ -100,7 +100,7 @@ func (s *StepPublishToSharedImageGallery) publishToSig(ctx context.Context, mdiI
 		GalleryImageVersionProperties: &compute.GalleryImageVersionProperties{
 			StorageProfile: &compute.GalleryImageVersionStorageProfile{
 				Source: &compute.GalleryArtifactVersionSource{
-					ID: &mdiID,
+					ID: &vmID,
 				},
 			},
 			PublishingProfile: &compute.GalleryImageVersionPublishingProfile{
@@ -149,11 +149,11 @@ func (s *StepPublishToSharedImageGallery) Run(ctx context.Context, stateBag mult
 	tags := stateBag.Get(constants.ArmTags).(map[string]*string)
 
 	sharedImageGallery := getSigDestination(stateBag)
-	targetManagedImageResourceGroupName := stateBag.Get(constants.ArmManagedImageResourceGroupName).(string)
-	targetManagedImageName := stateBag.Get(constants.ArmManagedImageName).(string)
 
-	managedImageSubscription := stateBag.Get(constants.ArmManagedImageSubscription).(string)
-	mdiID := fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/images/%s", managedImageSubscription, targetManagedImageResourceGroupName, targetManagedImageName)
+	vmSubscription := stateBag.Get(constants.ArmManagedImageSubscription).(string)
+	vmResourceGroupName := stateBag.Get(constants.ArmResourceGroupName).(string)
+	vmName := stateBag.Get(constants.ArmComputeName).(string)
+	vmID := fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/virtualMachines/%s", vmSubscription, vmResourceGroupName, vmName)
 
 	miSGImageVersionEndOfLifeDate, _ := stateBag.Get(constants.ArmManagedImageSharedGalleryImageVersionEndOfLifeDate).(string)
 	miSGImageVersionExcludeFromLatest, _ := stateBag.Get(constants.ArmManagedImageSharedGalleryImageVersionExcludeFromLatest).(bool)
@@ -165,7 +165,7 @@ func (s *StepPublishToSharedImageGallery) Run(ctx context.Context, stateBag mult
 		miSigReplicaCount = constants.SharedImageGalleryImageVersionDefaultMaxReplicaCount
 	}
 
-	s.say(fmt.Sprintf(" -> MDI ID used for SIG publish           : '%s'", mdiID))
+	s.say(fmt.Sprintf(" -> VM ID used for SIG publish            : '%s'", vmID))
 	s.say(fmt.Sprintf(" -> SIG publish resource group            : '%s'", sharedImageGallery.SigDestinationResourceGroup))
 	s.say(fmt.Sprintf(" -> SIG gallery name                      : '%s'", sharedImageGallery.SigDestinationGalleryName))
 	s.say(fmt.Sprintf(" -> SIG image name                        : '%s'", sharedImageGallery.SigDestinationImageName))
@@ -176,7 +176,7 @@ func (s *StepPublishToSharedImageGallery) Run(ctx context.Context, stateBag mult
 	s.say(fmt.Sprintf(" -> SIG image version exclude from latest : '%t'", miSGImageVersionExcludeFromLatest))
 	s.say(fmt.Sprintf(" -> SIG replica count [1, 10]             : '%d'", miSigReplicaCount))
 
-	createdGalleryImageVersionID, err := s.publish(ctx, mdiID, sharedImageGallery, miSGImageVersionEndOfLifeDate, miSGImageVersionExcludeFromLatest, miSigReplicaCount, location, tags)
+	createdGalleryImageVersionID, err := s.publish(ctx, vmID, sharedImageGallery, miSGImageVersionEndOfLifeDate, miSGImageVersionExcludeFromLatest, miSigReplicaCount, location, tags)
 
 	if err != nil {
 		stateBag.Put(constants.Error, err)
